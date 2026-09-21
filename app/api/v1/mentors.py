@@ -1,34 +1,44 @@
-from fastapi import APIRouter, HTTPException, Depends, Header, Query
+from fastapi import APIRouter, HTTPException, Depends, Header
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+
 from app.core.database import get_db
 from app.models.user import User
 from app.models.mentor import Mentor
 from app.models.booking import Booking, BookingStatus
 from app.schemas.mentor import (
-    MentorCreate, MentorUpdate, MentorResponse,
-    BookingCreate, BookingUpdate, BookingResponse,
-    MentorSearch
+    MentorCreate,
+    MentorUpdate,
+    MentorResponse,
+    BookingCreate,
+    BookingUpdate,
+    BookingResponse,
+    MentorSearch,
 )
 from app.core.security import decode_access_token
 
+
 router = APIRouter(prefix="/mentors", tags=["Mentors"])
 
+
 # ============================================
-# دالة مساعدة للحصول على المستخدم
+# دالة مساعدة: جلب المستخدم من التوكن
 # ============================================
 def get_current_user(token: str, db: Session):
     payload = decode_access_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
-    user = db.query(User).filter(User.username == payload.get("sub")).first()
+
+    user = db.query(User).filter(User.id == payload.get("user_id")).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+
     return user
 
+
 # ============================================
-# 1. إضافة مرشد جديد (المستخدم يصبح مرشداً)
+# 1. إنشاء مرشد جديد (POST)
 # ============================================
 @router.post("/", response_model=MentorResponse)
 def create_mentor(
@@ -37,13 +47,12 @@ def create_mentor(
     db: Session = Depends(get_db)
 ):
     user = get_current_user(token, db)
-    
-    # التحقق من أن المستخدم ليس مرشداً بالفعل
-    existing_mentor = db.query(Mentor).filter(Mentor.user_id == user.id).first()
-    if existing_mentor:
+
+    # التأكد إن المستخدم مش مرشد مسبقاً
+    existing = db.query(Mentor).filter(Mentor.user_id == user.id).first()
+    if existing:
         raise HTTPException(status_code=400, detail="User is already a mentor")
-    
-    # إنشاء مرشد جديد
+
     new_mentor = Mentor(
         user_id=user.id,
         specialty=mentor.specialty,
@@ -51,45 +60,29 @@ def create_mentor(
         hourly_rate=mentor.hourly_rate,
         bio=mentor.bio,
         is_available=True,
-        rating=0.0,
-        total_reviews=0
+        rating=0,
     )
-    
     db.add(new_mentor)
     db.commit()
     db.refresh(new_mentor)
-    
     return new_mentor
 
+
 # ============================================
-# 2. عرض جميع المرشدين (مع فلتر البحث)
+# 2. جلب كل المرشدين (GET)
 # ============================================
 @router.get("/", response_model=List[MentorResponse])
 def get_mentors(
-    specialty: Optional[str] = Query(None, description="فلتر حسب التخصص"),
-    min_experience: Optional[int] = Query(None, description="الحد الأدنى للخبرة"),
-    max_hourly_rate: Optional[float] = Query(None, description="الحد الأقصى للسعر"),
     token: str = Header(...),
     db: Session = Depends(get_db)
 ):
     user = get_current_user(token, db)
-    
-    query = db.query(Mentor)
-# تطبيق الفلاتر
-    if specialty:
-        query = query.filter(Mentor.specialty.ilike(f"%{specialty}%"))
-    if min_experience:
-        query = query.filter(Mentor.experience_years >= min_experience)
-    if max_hourly_rate:
-        query = query.filter(Mentor.hourly_rate <= max_hourly_rate)
-    
-    # فقط المرشدين المتاحين
-    query = query.filter(Mentor.is_available == True)
-    
-    return query.all()
+    mentors = db.query(Mentor).all()
+    return mentors
+
 
 # ============================================
-# 3. عرض مرشد معين
+# 3. جلب مرشد واحد بالـ ID (GET)
 # ============================================
 @router.get("/{mentor_id}", response_model=MentorResponse)
 def get_mentor(
@@ -98,81 +91,112 @@ def get_mentor(
     db: Session = Depends(get_db)
 ):
     user = get_current_user(token, db)
-    
+
     mentor = db.query(Mentor).filter(Mentor.id == mentor_id).first()
     if not mentor:
         raise HTTPException(status_code=404, detail="Mentor not found")
-    
+
     return mentor
 
+
 # ============================================
-# 4. تحديث بيانات المرشد
+# 4. تحديث مرشد (PUT)
 # ============================================
 @router.put("/{mentor_id}", response_model=MentorResponse)
 def update_mentor(
     mentor_id: int,
-    mentor_update: MentorUpdate,
+    mentor_data: MentorUpdate,
     token: str = Header(...),
     db: Session = Depends(get_db)
 ):
     user = get_current_user(token, db)
-    
+
     mentor = db.query(Mentor).filter(Mentor.id == mentor_id).first()
     if not mentor:
         raise HTTPException(status_code=404, detail="Mentor not found")
-    
-    # التأكد من أن المستخدم هو صاحب الحساب
+
     if mentor.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
-    # تحديث الحقول
-    if mentor_update.specialty is not None:
-        mentor.specialty = mentor_update.specialty
-    if mentor_update.experience_years is not None:
-        mentor.experience_years = mentor_update.experience_years
-    if mentor_update.hourly_rate is not None:
-        mentor.hourly_rate = mentor_update.hourly_rate
-    if mentor_update.bio is not None:
-        mentor.bio = mentor_update.bio
-    if mentor_update.is_available is not None:
-        mentor.is_available = mentor_update.is_available
-    
-    db.commit()
+
+    if mentor_data.specialty is not None:
+        mentor.specialty = mentor_data.specialty
+    if mentor_data.experience_years is not None:
+        mentor.experience_years = mentor_data.experience_years
+    if mentor_data.hourly_rate is not None:
+        mentor.hourly_rate = mentor_data.hourly_rate
+    if mentor_data.bio is not None:
+        mentor.bio = mentor_data.bio
+    if mentor_data.is_available is not None:
+        mentor.is_available = mentor_data.is_available
+        db.commit()
     db.refresh(mentor)
-    
     return mentor
 
+
 # ============================================
-# 5. حجز جلسة مع مرشد
+# 5. حذف مرشد (DELETE)
 # ============================================
-@router.post("/booking", response_model=BookingResponse)
+@router.delete("/{mentor_id}")
+def delete_mentor(
+    mentor_id: int,
+    token: str = Header(...),
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+
+    mentor = db.query(Mentor).filter(Mentor.id == mentor_id).first()
+    if not mentor:
+        raise HTTPException(status_code=404, detail="Mentor not found")
+
+    if mentor.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    db.delete(mentor)
+    db.commit()
+    return {"message": "Mentor deleted successfully"}
+
+
+# ============================================
+# 6. البحث عن مرشدين (POST)
+# ============================================
+@router.post("/search", response_model=List[MentorResponse])
+def search_mentors(
+    search: MentorSearch,
+    token: str = Header(...),
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+
+    query = db.query(Mentor)
+    if search.specialty:
+        query = query.filter(Mentor.specialty.ilike(f"%{search.specialty}%"))
+    if search.min_rating:
+        query = query.filter(Mentor.rating >= search.min_rating)
+
+    mentors = query.all()
+    return mentors
+
+
+# ============================================
+# 7. حجز جلسة مع مرشد (POST)
+# ============================================
+@router.post("/bookings/", response_model=BookingResponse)
 def create_booking(
     booking: BookingCreate,
     token: str = Header(...),
     db: Session = Depends(get_db)
 ):
     user = get_current_user(token, db)
-    
-    # التحقق من وجود المرشد
+
+    # التأكد إن المرشد موجود
     mentor = db.query(Mentor).filter(Mentor.id == booking.mentor_id).first()
     if not mentor:
         raise HTTPException(status_code=404, detail="Mentor not found")
-    
-    # التحقق من أن الطالب ليس هو المرشد نفسه
+
+    # التأكد إن المستخدم مش بيحجز مع نفسه
     if mentor.user_id == user.id:
         raise HTTPException(status_code=400, detail="Cannot book yourself")
-    
-    # التحقق من عدم وجود حجز مكرر في نفس الوقت
-    existing_booking = db.query(Booking).filter(
-        Booking.mentor_id == booking.mentor_id,
-        Booking.start_time == booking.start_time,
-        Booking.status != BookingStatus.CANCELLED
-    ).first()
-    
-    if existing_booking:
-        raise HTTPException(status_code=400, detail="This time slot is already booked")
-    
-    # إنشاء حجز جديد
+
     new_booking = Booking(
         student_id=user.id,
         mentor_id=booking.mentor_id,
@@ -180,60 +204,74 @@ def create_booking(
         start_time=booking.start_time,
         end_time=booking.end_time,
         status=BookingStatus.PENDING,
-        notes=booking.notes
+        notes=booking.notes,
     )
-    
     db.add(new_booking)
     db.commit()
     db.refresh(new_booking)
-    
     return new_booking
 
+
 # ============================================
-# 6. عرض حجوزات المستخدم
+# 8. جلب كل حجوزاتي (GET)
 # ============================================
-@router.get("/booking/my", response_model=List[BookingResponse])
+@router.get("/bookings/my", response_model=List[BookingResponse])
 def get_my_bookings(
     token: str = Header(...),
     db: Session = Depends(get_db)
 ):
     user = get_current_user(token, db)
-    
-    bookings = db.query(Booking).filter(
-        (Booking.student_id == user.id) | (Booking.mentor_id == user.id)
-    ).all()
-    
+
+    bookings = db.query(Booking).filter(Booking.student_id == user.id).all()
     return bookings
 
+
 # ============================================
-# 7. تحديث حالة الحجز (تأكيد/إلغاء)
+# 9. تحديث حجز (PUT)
 # ============================================
-@router.put("/booking/{booking_id}")
-def update_booking_status(
+@router.put("/bookings/{booking_id}", response_model=BookingResponse)
+def update_booking(
     booking_id: int,
-    status_update: BookingUpdate,
+    booking_data: BookingUpdate,
     token: str = Header(...),
     db: Session = Depends(get_db)
 ):
     user = get_current_user(token, db)
-    
+
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
-    
-    # التأكد من أن المستخدم هو صاحب الحجز أو المرشد
-    mentor = db.query(Mentor).filter(Mentor.id == booking.mentor_id).first()
-    if booking.student_id != user.id and mentor.user_id != user.id:
+
+    if booking.student_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
-    # تحديث الحالة
-    if status_update.status:
-        try:
-            booking.status = BookingStatus[status_update.status.upper()]
-        except KeyError:
-            raise HTTPException(status_code=400, detail="Invalid status")
-    
+
+    if booking_data.status is not None:
+        booking.status = booking_data.status
+    if booking_data.notes is not None:
+        booking.notes = booking_data.notes
+
     db.commit()
     db.refresh(booking)
-    
-    return {"message": f"Booking {booking.status.value}"}
+    return booking
+
+
+# ============================================
+# 10. حذف حجز (DELETE)
+# ============================================
+@router.delete("/bookings/{booking_id}")
+def delete_booking(
+    booking_id: int,
+    token: str = Header(...),
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if booking.student_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    db.delete(booking)
+    db.commit()
+    return {"message": "Booking deleted successfully"}

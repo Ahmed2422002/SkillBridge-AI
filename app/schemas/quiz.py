@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
+from datetime import datetime
+
 
 # ============================================
 # مخططات الاختبار (Quiz)
@@ -11,23 +13,27 @@ class QuizCreate(BaseModel):
     passing_score: int = 70
     duration_minutes: int = 10
 
+
 class QuizUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     passing_score: Optional[int] = None
     duration_minutes: Optional[int] = None
 
+
 class QuizResponse(BaseModel):
     id: int
     content_id: int
     title: str
-    description: Optional[str]
+    description: Optional[str] = None
     passing_score: int
     duration_minutes: int
-    created_at: str
-    
+    created_at: datetime   # ← التعديل هنا
+
     class Config:
         from_attributes = True
+
+
 # ============================================
 # مخططات الأسئلة (Question)
 # ============================================
@@ -37,27 +43,28 @@ class QuestionCreate(BaseModel):
     option_b: str
     option_c: str
     option_d: str
-    correct_answer: str  # 'A', 'B', 'C', 'D'
+    correct_answer: str
+
 
 class QuestionResponse(BaseModel):
     id: int
-    quiz_id: int
     question_text: str
     option_a: str
     option_b: str
     option_c: str
     option_d: str
-    # ملاحظة: لا نرسل الإجابة الصحيحة للمستخدم
-    
+
     class Config:
         from_attributes = True
 
+
 # ============================================
-# مخططات تقديم الاختبار
+# مخططات تسليم الاختبار
 # ============================================
 class QuizSubmit(BaseModel):
     quiz_id: int
     answers: dict  # {question_id: "A"}
+
 
 class QuizResultResponse(BaseModel):
     quiz_id: int
