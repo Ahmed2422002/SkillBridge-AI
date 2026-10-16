@@ -1,48 +1,35 @@
+import bcrypt
 from datetime import datetime, timedelta
+from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
-from app.core.config import settings
 
-# ============================================
-# إعداد تشفير كلمات المرور
-# ============================================
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+SECRET_KEY = "skillbridge_secret_key_2026"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
-# ============================================
-# 1. التحقق من كلمة المرور
-# ============================================
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """التحقق من كلمة المرور"""
-    return pwd_context.verify(plain_password, hashed_password)
+def get_password_hash(password: str):
+    # تقصير الباسورد لـ 72 بايت عشان bcrypt ميعملش Crash
+    pwd_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(pwd_bytes, salt)
+    return hashed.decode('utf-8')
 
-# ============================================
-# 2. تشفير كلمة المرور
-# ============================================
-def get_password_hash(password: str) -> str:
-    """تشفير كلمة المرور"""
-    return pwd_context.hash(password)
-
-# ============================================
-# 3. إنشاء التوكن (JWT)
-# ============================================
-def create_access_token(data: dict):
-    """إنشاء توكن JWT"""
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-
-# ============================================
-# 4. فك تشفير التوكن (هذي الدالة الناقصة)
-# ============================================
-def decode_access_token(token: str):
-    """فك تشفير التوكن واستخراج البيانات منه"""
+def verify_password(plain_password: str, hashed_password: str):
+    pwd_bytes = plain_password.encode('utf-8')[:72]
+    hashed_bytes = hashed_password.encode('utf-8')
     try:
-        payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
-        )
-        return payload
+        return bcrypt.checkpw(pwd_bytes, hashed_bytes)
+    except Exception:
+        return False
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=15))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def decode_access_token(token: str):
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return None

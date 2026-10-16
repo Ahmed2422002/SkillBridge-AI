@@ -1,135 +1,90 @@
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from datetime import timedelta
+from pydantic import BaseModel, EmailStr
+
 from app.core.database import get_db
+from app.core.security import verify_password, get_password_hash, create_access_token, decode_access_token
 from app.models.user import User
-from app.core.security import (
-    get_password_hash,
-    verify_password,
-    create_access_token,
-    decode_access_token,
-)
 
+router = APIRouter()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
-router = APIRouter(prefix="/auth", tags=["Auth"])
+# Schemas
+class UserCreate(BaseModel):
+    email: EmailStr
+    username: str
+    password: str
+    full_name: str | None = None
 
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
 
-# ============================================
-# 1. تسجيل مستخدم جديد
-# ============================================
-@router.post("/register")
-def register(
-    email: str,
-    username: str,
-    password: str,
-    full_name: str = None,
-    db: Session = Depends(get_db)
-):
-    # التحقق إذا المستخدم موجود
-    existing = db.query(User).filter(
-        (User.email == email) | (User.username == username)
-    ).first()
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    username: str
+    full_name: str | None = None
+    class Config:
+        from_attributes = True
 
-    if existing:
-        raise HTTPException(
-            status_code=400,
-            detail="Email or username already registered"
-        )
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
-    # إنشاء المستخدم الجديد
+# دالة الحماية
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    payload = decode_access_token(token)
+    if payload is None:
+        raise credentials_exception
+    email: str = payload.get("sub")
+    if email is None:
+        raise credentials_exception
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+# Endpoints
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    hashed_password = get_password_hash(user_data.password)
+    
+    # ⚠️ ملاحظة: لو الموديل بتاعك مسمي الحقل "password" مش "hashed_password"، غير الكلمة دي
     new_user = User(
-        email=email,
-        username=username,
-        hashed_password=get_password_hash(password),
-        full_name=full_name,
-        is_active=True,
-        is_admin=False,
-        is_mentor=False,
+        email=user_data.email,
+        username=user_data.username,
+        hashed_password=hashed_password, 
+        full_name=user_data.full_name
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    return new_user
 
-    return {"message": "User created successfully", "user_id": new_user.id}
+@router.post("/login", response_model=Token)
+def login(user_data: UserLogin, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == user_data.email).first()
+    if not user or not verify_password(user_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=60))
+    return {"access_token": access_token, "token_type": "bearer"}
 
-
-# ============================================
-# 2. تسجيل الدخول
-# ============================================
-@router.post("/login")
-def login(
-    username: str,
-    password: str,
-    db: Session = Depends(get_db)
-):
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if not verify_password(password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid password")
-
-    token = create_access_token({"user_id": user.id})
-
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user_id": user.id,
-    }
-
-
-# ============================================
-# 3. جلب بيانات المستخدم الحالي
-# ============================================
-@router.get("/me")
-def get_me(
-    token: str = Header(...),
-    db: Session = Depends(get_db)
-):
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    user = db.query(User).filter(User.id == payload.get("user_id")).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return {
-        "id": user.id,
-        "email": user.email,
-        "username": user.username,
-        "full_name": user.full_name,
-    }
-
-
-# ============================================
-# 4. تحديث بيانات المستخدم (PUT)
-# ============================================
-@router.put("/me")
-def update_me(
-    full_name: str = None,
-    email: str = None,
-    token: str = Header(...),
-    db: Session = Depends(get_db)
-):
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    user = db.query(User).filter(User.id == payload.get("user_id")).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if full_name is not None:
-        user.full_name = full_name
-    if email is not None:
-        user.email = email
-
-    db.commit()
-    db.refresh(user)
-
-    return {
-        "id": user.id,
-        "email": user.email,
-        "username": user.username,
-        "full_name": user.full_name,
-    }
+@router.get("/me", response_model=UserResponse)
+def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
