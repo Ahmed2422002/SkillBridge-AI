@@ -20,28 +20,32 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# إعداد CORS
+# إعداد CORS (تم تصحيحه هنا)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://skill-bridge-frontend-flame.vercel.app", # رابط موقعك على Vercel
+        "http://localhost:3000", # للتجربة المحلية
+        "http://localhost:5173"  # للتجربة المحلية
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # تسجيل المسارات
-app.include_router(auth.router, prefix="/auth", tags=["Auth"])
-app.include_router(roadmaps.router, prefix="/roadmaps", tags=["Roadmaps"])
-app.include_router(survey.router, prefix="/survey", tags=["Survey"])
-app.include_router(content.router, prefix="/content", tags=["Content"])
-app.include_router(quizzes.router, prefix="/quizzes", tags=["Quizzes"])
-app.include_router(mentors.router, prefix="/mentors", tags=["Mentors"])
-app.include_router(admin.router, prefix="/admin", tags=["Admin"])
-app.include_router(progress.router, prefix="/progress", tags=["Progress"])
+app.include_router(auth.router, prefix="/auth")
+app.include_router(roadmaps.router, prefix="/roadmaps")
+app.include_router(survey.router, prefix="/survey")
+app.include_router(content.router, prefix="/content")
+app.include_router(quizzes.router, prefix="/quizzes")
+app.include_router(mentors.router, prefix="/mentors")
+app.include_router(admin.router, prefix="/admin")
+app.include_router(progress.router, prefix="/progress")
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to SkillBridge AI Platform!"}
+    return {"message": "Welcome to SkillBridge AI API"}
 
 @app.get("/test")
 def test():
