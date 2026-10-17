@@ -14,20 +14,24 @@ from app.api.v1 import auth, roadmaps, survey, content, quizzes, mentors, admin,
 # إنشاء الجداول في قاعدة البيانات
 Base.metadata.create_all(bind=engine)
 
+# إضافة redirect_slashes=False لمنع مشكلة الـ 307 Redirect التي تكسر الـ CORS
 app = FastAPI(
     title="SkillBridge AI API",
     description="منصة تعلم ذكية باستخدام الذكاء الاصطناعي",
-    version="1.0.0"
+    version="1.0.0",
+    redirect_slashes=False
 )
 
-# إعداد CORS (تم تصحيحه هنا)
+# إعداد CORS
+origins = [
+    "https://skill-bridge-frontend-flame.vercel.app", # رابط موقعك
+    "http://localhost:3000",
+    "http://localhost:5173"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://skill-bridge-frontend-flame.vercel.app", # رابط موقعك على Vercel
-        "http://localhost:3000", # للتجربة المحلية
-        "http://localhost:5173"  # للتجربة المحلية
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
