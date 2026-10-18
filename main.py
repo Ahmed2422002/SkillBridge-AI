@@ -13,11 +13,10 @@ app = FastAPI(
 # ==========================================
 # 1. إعدادات CORS (أهم جزء لحل المشكلة)
 # ==========================================
-# لازم تحط رابط Vercel تبعك بالضبط، وبدون / في الآخر
 origins = [
     "https://skill-bridge-frontend-flame.vercel.app",
-    "http://localhost:3000",  # للتطوير المحلي
-    "http://localhost:5173",  # للتطوير المحلي (Vite)
+    "http://localhost:3000",
+    "http://localhost:5173",
 ]
 
 app.add_middleware(
@@ -49,21 +48,13 @@ class Mentor(BaseModel):
     expertise: str
 
 # ==========================================
-# 3. المسارات (Routes) - تأكد من البادئة /api/v1
+# 3. الدوال الأساسية (Business Logic)
 # ==========================================
-# بناءً على صورة الـ Swagger، المسار هو /api/v1/register
-# إذا الفرونت إند يبعت لـ /api/v1/register، لازم نطابق هذا المسار
-
-@app.post("/api/v1/register", tags=["Auth"])
-async def register(user: UserRegister):
+async def register_logic(user: UserRegister):
     # هنا بتحط منطق التسجيل (حفظ بالداتابيز)
-    # مثال مبدئي:
     return {"message": "User registered successfully", "user": user.email}
 
-@app.post("/api/v1/login", response_model=Token, tags=["Auth"])
-async def login(user: UserLogin):
-    # هنا بتحط منطق التحقق من الإيميل والباسورد
-    # مثال مبدئي (للتجربة فقط، لا تستخدمه بالإنتاج):
+async def login_logic(user: UserLogin):
     if user.email and user.password:
         return {"access_token": "fake-jwt-token", "token_type": "bearer"}
     raise HTTPException(
@@ -71,12 +62,37 @@ async def login(user: UserLogin):
         detail="Invalid credentials"
     )
 
-@app.get("/api/v1/me", tags=["Auth"])
-async def read_users_me():
-    return {"user": "current_user_info"}
+# ==========================================
+# 4. المسارات (Routes) 
+# ==========================================
+
+# --- المسارات الأصلية (اللي كانت عندك) ---
+@app.post("/api/v1/register", tags=["Auth"])
+async def register(user: UserRegister):
+    return await register_logic(user)
+
+@app.post("/api/v1/login", response_model=Token, tags=["Auth"])
+async def login(user: UserLogin):
+    return await login_logic(user)
+
+# --- المسارات البديلة (عشان نمسك الفرونت إند اللي بيبعت مسارات غلط) ---
+# بناءً على الـ Logs، الفرونت بيبعت لـ /auth/student/signup
+@app.post("/auth/student/signup", tags=["Fallback Auth"])
+async def fallback_signup(user: UserRegister):
+    return await register_logic(user)
+
+# وهاي مسارات بديلة للتسجيل والدخول عشان نضرب عصفورين بحجر
+@app.post("/auth/signup", tags=["Fallback Auth"])
+async def fallback_signup_2(user: UserRegister):
+    return await register_logic(user)
+
+@app.post("/auth/login", tags=["Fallback Auth"])
+async def fallback_login(user: UserLogin):
+    return await login_logic(user)
+
 
 # ==========================================
-# 4. مسارات المينتورز (Mentors) - موجودة بالـ Swagger
+# 5. مسارات المينتورز (Mentors)
 # ==========================================
 @app.get("/api/v1/mentors/", tags=["Mentors"])
 async def get_mentors():
@@ -87,7 +103,7 @@ async def create_mentor(mentor: Mentor):
     return {"message": "Mentor created", "mentor": mentor}
 
 # ==========================================
-# 5. مسار الصحة (Health Check) - مفيد لـ Render
+# 6. مسار الصحة (Health Check)
 # ==========================================
 @app.get("/")
 async def root():
