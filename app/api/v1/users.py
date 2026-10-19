@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.user import User
-# تأكد أن ملف schemas يحتوي على UserLogin
 from app.schemas.user import UserCreate, UserResponse, UserLogin 
 from app.core.security import get_password_hash, verify_password, create_access_token
 from datetime import timedelta
@@ -20,11 +19,11 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # إنشاء مستخدم جديد
+    # إنشاء مستخدم جديد بالحقول التي يرسلها الفرونت إند
     new_user = User(
-        name=user.name,
+        username=user.username,         # تم التعديل
+        full_name=user.full_name,       # تم التعديل
         email=user.email,
-        # ⚠️ ملاحظة: إذا كان حقل كلمة المرور في موديل User اسمه hashed_password، غير الكلمة أدناه
         password_hash=get_password_hash(user.password) 
     )
     
@@ -48,23 +47,24 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    # التحقق من كلمة المرور (تأكد من اسم الحقل في الموديل password_hash أو hashed_password)
+    # التحقق من كلمة المرور
     if not verify_password(user_credentials.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    # ✨ تم تفعيل إنشاء التوكن هنا
+    # إنشاء التوكن
     access_token = create_access_token(
         data={"sub": user.email}, 
-        expires_delta=timedelta(minutes=60) # صلاحية التوكن ساعة واحدة
+        expires_delta=timedelta(minutes=60)
     )
     
-    # إرجاع الاستجابة للفرونت إند (مع التوكن)
+    # إرجاع الاستجابة للفرونت إند
     return {
         "message": "Login successful", 
         "access_token": access_token,
         "token_type": "bearer",
         "user": {
-            "name": user.name, 
+            "username": user.username,  # تم التعديل
+            "full_name": user.full_name, # تم التعديل
             "email": user.email
         }
-                            }
+    }
