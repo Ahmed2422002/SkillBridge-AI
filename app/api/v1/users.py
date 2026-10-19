@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, UserResponse, UserLogin # تأكد أن UserLogin موجود في السكيما
+# تأكد أن ملف schemas يحتوي على UserLogin
+from app.schemas.user import UserCreate, UserResponse, UserLogin 
 from app.core.security import get_password_hash, verify_password, create_access_token
 from datetime import timedelta
 
@@ -23,7 +24,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     new_user = User(
         name=user.name,
         email=user.email,
-        # ⚠️ ملاحظة هامة: إذا كان حقل كلمة المرور في موديل المستخدم اسمه hashed_password، غير الكلمة أدناه
+        # ⚠️ ملاحظة: إذا كان حقل كلمة المرور في موديل User اسمه hashed_password، غير الكلمة أدناه
         password_hash=get_password_hash(user.password) 
     )
     
@@ -43,16 +44,27 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     # البحث عن المستخدم بالايميل
     user = db.query(User).filter(User.email == user_credentials.email).first()
     
-    # إذا لم يوجد المستخدم أو كلمة المرور غير صحيحة
+    # إذا لم يوجد المستخدم
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
     
     # التحقق من كلمة المرور (تأكد من اسم الحقل في الموديل password_hash أو hashed_password)
     if not verify_password(user_credentials.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    # إنشاء التوكن (إذا كان نظامك يستخدم JWT)
-    # access_token = create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=30))
+    # ✨ تم تفعيل إنشاء التوكن هنا
+    access_token = create_access_token(
+        data={"sub": user.email}, 
+        expires_delta=timedelta(minutes=60) # صلاحية التوكن ساعة واحدة
+    )
     
-    # إرجاع استجابة بسيطة (يمكنك تعديلها حسب ما يتوقعه الفرونت إند)
-    return {"message": "Login successful", "user": user.name, "email": user.email}
+    # إرجاع الاستجابة للفرونت إند (مع التوكن)
+    return {
+        "message": "Login successful", 
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "name": user.name, 
+            "email": user.email
+        }
+                            }
