@@ -19,9 +19,12 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
+    # ✨ السر هنا: إذا لم يرسل الفرونت إند username، نأخذ القيمة من name
+    final_username = user.username if user.username else (user.name if user.name else user.email.split('@')[0])
+    
     # إنشاء مستخدم جديد
     new_user = User(
-        username=user.username,         
+        username=final_username,         
         full_name=user.full_name,       
         email=user.email,
         password_hash=get_password_hash(user.password) 
@@ -47,11 +50,11 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    # التحقق من كلمة المرور (تمت إضافة try/except لمنع انهيار السيرفر)
+    # التحقق من كلمة المرور (محمي ضد الانهيار)
     try:
         is_password_correct = verify_password(user_credentials.password, user.password_hash)
     except Exception:
-        is_password_correct = False # إذا كان الباسورد القديم تالف، نعتبره خطأ
+        is_password_correct = False 
         
     if not is_password_correct:
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -72,4 +75,4 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
             "full_name": user.full_name, 
             "email": user.email
         }
-        }
+    }
