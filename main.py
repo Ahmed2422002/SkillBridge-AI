@@ -18,8 +18,8 @@ class UserRegister(BaseModel):
     email: str
     password: str
 
-# 1. المسار الجديد اللي أنت كتبته
-@app.post("/auth/student/signup")
+# 1. المسار الجديد (تمت إضافة /api/v1 عشان يطابق طلب الفرونت إند)
+@app.post("/api/v1/auth/student/signup")
 async def signup(user: UserRegister):
     print(f"✅✅✅ وصل الطلب للتسجيل (المسار الجديد)! البيانات: {user}")
     return {"message": "Success", "user": user.name}
