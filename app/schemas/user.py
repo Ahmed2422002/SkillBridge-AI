@@ -4,8 +4,9 @@ from datetime import datetime
 
 class UserBase(BaseModel):
     email: EmailStr
-    username: str
+    username: Optional[str] = None  # جعلناه اختياري لتجنب أخطاء الرفض
     full_name: Optional[str] = None
+    name: Optional[str] = None      # أضفناه لاستقبال حقل الاسم من الواجهة
 
 class UserCreate(UserBase):
     password: str
