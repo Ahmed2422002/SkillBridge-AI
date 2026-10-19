@@ -4,9 +4,10 @@ from pydantic import BaseModel
 
 app = FastAPI()
 
+# إعدادات CORS مفتوحة بالكامل للتجربة (كما طلبت)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # للتجربة عشان نلغي أي مشكلة CORS
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -17,13 +18,19 @@ class UserRegister(BaseModel):
     email: str
     password: str
 
-# هاد المسار اللي الفرونت إند عم يدور عليه بالضبط
+# 1. المسار الجديد اللي أنت كتبته
 @app.post("/auth/student/signup")
 async def signup(user: UserRegister):
-    print("✅✅✅ وصل الطلب للتسجيل بنجاح! ✅✅✅")
-    return {"message": "Success"}
+    print(f"✅✅✅ وصل الطلب للتسجيل (المسار الجديد)! البيانات: {user}")
+    return {"message": "Success", "user": user.name}
 
-# هاد المسار الأصلي تبعك للاحتياط
+# 2. المسار القديم (الاحتياطي)
 @app.post("/api/v1/register")
 async def register(user: UserRegister):
-    return {"message": "Success"}
+    print(f"✅✅✅ وصل الطلب للتسجيل (المسار القديم)! البيانات: {user}")
+    return {"message": "Success", "user": user.name}
+
+# مسار إضافي للفحص السريع
+@app.get("/")
+def read_root():
+    return {"status": "Backend is running perfectly!"}
