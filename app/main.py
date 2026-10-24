@@ -25,7 +25,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     # هذا السطر سيطبع الخطأ في سجلات Render لكي نعرف الحقل الناقص
     print(f"❌ خطأ في البيانات المرسلة: {exc.errors()}")
     return JSONResponse(
-        status_code=400,
+        status_code=422,
         content={"detail": exc.errors()},
     )
 
